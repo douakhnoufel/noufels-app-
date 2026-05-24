@@ -37,7 +37,7 @@ class FullInferenceResult {
 
 class ClassifierService {
   static const String _modelPath =
-      'assets/models/potato_disease_detector.tflite';
+      'assets/models/best_float32.tflite';
   static const int _inputSize = 224;
   static const int _numClasses = 3;
 
