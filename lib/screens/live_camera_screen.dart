@@ -22,14 +22,17 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
   bool _isInitialized = false;
   bool _isDetecting = false;
   bool _isFrontCamera = false;
+  bool _isFlashOn = false;
 
   // Detection results
   String _label = 'Scanning...';
   double _confidence = 0.0;
   Color _labelColor = Colors.white70;
 
+  // Threshold: if confidence < 45%, we show "Scanning..." to avoid false positives
+  static const double _confidenceThreshold = 0.45;
+
   // Throttle: run inference every N ms
-  // Lowered for smoother real-time experience
   static const int _inferenceIntervalMs = 150;
   DateTime _lastInference = DateTime.fromMillisecondsSinceEpoch(0);
 
@@ -94,14 +97,19 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
       final result = await widget.classifier.classifyCameraFrame(frame);
 
       if (mounted) {
-        final nextLabel = result.label;
-        final nextColor = _classColors[result.label] ?? Colors.white;
+        final double currentConf = result.confidence;
+        final bool isCertain = currentConf >= _confidenceThreshold;
+        
+        final nextLabel = isCertain ? result.label : 'Scanning...';
+        final nextColor = isCertain 
+            ? (_classColors[result.label] ?? Colors.white) 
+            : Colors.white70;
 
         if (nextLabel != _label ||
-            (result.confidence - _confidence).abs() > 0.05) {
+            (currentConf - _confidence).abs() > 0.05) {
           setState(() {
             _label = nextLabel;
-            _confidence = result.confidence;
+            _confidence = isCertain ? currentConf : 0.0;
             _labelColor = nextColor;
           });
         }
@@ -149,6 +157,19 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
     throw UnsupportedError('Unsupported image format: ${image.format.group}');
   }
 
+  Future<void> _toggleFlash() async {
+    if (_controller == null || !_isInitialized) return;
+    try {
+      _isFlashOn = !_isFlashOn;
+      await _controller!.setFlashMode(
+        _isFlashOn ? FlashMode.torch : FlashMode.off,
+      );
+      setState(() {});
+    } catch (e) {
+      debugPrint('Flash Error: $e');
+    }
+  }
+
   Future<void> _toggleCamera() async {
     if (_cameras.length < 2) return;
     final controller = _controller;
@@ -157,6 +178,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
       await controller.dispose();
     }
     _isFrontCamera = !_isFrontCamera;
+    _isFlashOn = false;
     setState(() => _isInitialized = false);
     await _startCamera(_cameras[_isFrontCamera ? 1 : 0]);
   }
@@ -272,6 +294,11 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
                       onTap: () => Navigator.pop(context),
                     ),
                     const Spacer(),
+                    _BlurButton(
+                      icon: _isFlashOn ? Icons.flash_on_rounded : Icons.flash_off_rounded,
+                      onTap: _toggleFlash,
+                    ),
+                    const SizedBox(width: 12),
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 14, vertical: 8),
@@ -298,7 +325,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
                         ],
                       ),
                     ),
-                    const Spacer(),
+                    const SizedBox(width: 12),
                     _BlurButton(
                       icon: Icons.flip_camera_ios_outlined,
                       onTap: _toggleCamera,
