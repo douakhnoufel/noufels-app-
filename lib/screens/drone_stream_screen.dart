@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_vlc_player/flutter_vlc_player.dart';
 import '../services/classifier_service.dart';
-import 'result_screen.dart';
 
 class DroneStreamScreen extends StatefulWidget {
   final ClassifierService classifier;
@@ -15,9 +14,9 @@ class DroneStreamScreen extends StatefulWidget {
 }
 
 class _DroneStreamScreenState extends State<DroneStreamScreen> {
-  late VlcPlayerController _vlcController;
+  VlcPlayerController? _vlcController;
   final TextEditingController _urlController = TextEditingController(
-    text: 'rtmp://192.168.1.10/live/drone', // Default placeholder
+    text: 'rtmp://192.168.1.10/live/drone',
   );
   
   bool _isPlaying = false;
@@ -27,38 +26,34 @@ class _DroneStreamScreenState extends State<DroneStreamScreen> {
   Color _labelColor = Colors.white70;
 
   @override
-  void initState() {
-    super.initState();
-    _vlcController = VlcPlayerController.network(
-      _urlController.text,
-      hwAcc: HwAcc.full,
-      autoPlay: false,
-      options: VlcPlayerOptions(),
-    );
-  }
-
-  @override
   void dispose() {
-    _vlcController.dispose();
+    _vlcController?.dispose();
     _urlController.dispose();
     super.dispose();
   }
 
   Future<void> _toggleStream() async {
     if (_isPlaying) {
-      await _vlcController.pause();
+      await _vlcController?.stop();
+      setState(() {
+        _isPlaying = false;
+        _vlcController = null;
+      });
     } else {
-      await _vlcController.setStreamUrl(_urlController.text);
-      await _vlcController.play();
+      _vlcController = VlcPlayerController.network(
+        _urlController.text,
+        hwAcc: HwAcc.full,
+        autoPlay: true,
+        options: VlcPlayerOptions(),
+      );
+      setState(() => _isPlaying = true);
       _startInferenceLoop();
     }
-    setState(() => _isPlaying = !_isPlaying);
   }
 
   void _startInferenceLoop() async {
-    // Run inference every 500ms on the stream frame
     while (_isPlaying && mounted) {
-      if (!_isDetecting) {
+      if (!_isDetecting && _vlcController != null && _vlcController!.value.isPlaying) {
         _runInferenceOnFrame();
       }
       await Future.delayed(const Duration(milliseconds: 500));
@@ -66,12 +61,11 @@ class _DroneStreamScreenState extends State<DroneStreamScreen> {
   }
 
   Future<void> _runInferenceOnFrame() async {
-    if (!mounted || _isDetecting) return;
+    if (!mounted || _isDetecting || _vlcController == null) return;
     
     _isDetecting = true;
     try {
-      // Capture the current frame from VLC as bytes
-      final Uint8List? imageBytes = await _vlcController.takeSnapshot();
+      final Uint8List? imageBytes = await _vlcController!.takeSnapshot();
       
       if (imageBytes != null && mounted) {
         final full = await widget.classifier.classifyBytes(imageBytes);
@@ -99,7 +93,6 @@ class _DroneStreamScreenState extends State<DroneStreamScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -111,7 +104,6 @@ class _DroneStreamScreenState extends State<DroneStreamScreen> {
       ),
       body: Column(
         children: [
-          // URL Input
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             child: Row(
@@ -140,7 +132,6 @@ class _DroneStreamScreenState extends State<DroneStreamScreen> {
             ),
           ),
 
-          // Video Feed
           Expanded(
             child: Container(
               margin: const EdgeInsets.all(20),
@@ -154,17 +145,18 @@ class _DroneStreamScreenState extends State<DroneStreamScreen> {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    VlcPlayer(
-                      controller: _vlcController,
-                      aspectRatio: 16 / 9,
-                      placeholder: const Center(child: CircularProgressIndicator()),
-                    ),
+                    if (_vlcController != null)
+                      VlcPlayer(
+                        controller: _vlcController!,
+                        aspectRatio: 16 / 9,
+                        placeholder: const Center(child: CircularProgressIndicator()),
+                      )
+                    else
+                      const Center(child: Icon(Icons.videocam_off_outlined, color: Colors.white12, size: 48)),
                     
-                    // Scanning Lines (Animated)
                     if (_isPlaying)
                       _DroneScanningOverlay(color: _labelColor),
 
-                    // Floating Detection Result
                     Positioned(
                       top: 20,
                       left: 20,
@@ -186,7 +178,6 @@ class _DroneStreamScreenState extends State<DroneStreamScreen> {
             ),
           ),
 
-          // HUD / Stats
           Container(
             padding: const EdgeInsets.all(24),
             child: Column(
@@ -194,9 +185,9 @@ class _DroneStreamScreenState extends State<DroneStreamScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    _HudStat(label: 'ALTITUDE', value: '--- m'),
+                    const _HudStat(label: 'ALTITUDE', value: '--- m'),
                     _HudStat(label: 'CONFIDENCE', value: '${(_confidence * 100).toStringAsFixed(1)}%'),
-                    _HudStat(label: 'MODE', value: 'RTMP LIVE'),
+                    const _HudStat(label: 'MODE', value: 'RTMP LIVE'),
                   ],
                 ),
                 const SizedBox(height: 32),
@@ -239,7 +230,6 @@ class _DroneScanningOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        // Horizontal scan line
         Container(
           width: double.infinity,
           height: 2,
@@ -254,7 +244,6 @@ class _DroneScanningOverlay extends StatelessWidget {
               duration: 3.seconds,
               curve: Curves.easeInOut,
             ),
-        // Corner borders
         Container(
           decoration: BoxDecoration(
             border: Border.all(color: color.withValues(alpha: 0.3), width: 1),
