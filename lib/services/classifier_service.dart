@@ -213,6 +213,26 @@ class ClassifierService {
     return expScores;
   }
 
+  String getSeverityFor(String label) {
+    final idx = _labels.indexOf(label);
+    return idx != -1 ? _severities[idx] : 'Unknown';
+  }
+
+  String getDescriptionFor(String label) {
+    final idx = _labels.indexOf(label);
+    return idx != -1 ? _descriptions[idx] : 'No description available.';
+  }
+
+  List<String> getRecommendationsFor(String label) {
+    final idx = _labels.indexOf(label);
+    return idx != -1 ? _recommendations[idx] : [];
+  }
+
+  Color getColorFor(String label) {
+    final idx = _labels.indexOf(label);
+    return idx != -1 ? _colors[idx] : Colors.grey;
+  }
+
   void dispose() {
     _engine.dispose();
   }

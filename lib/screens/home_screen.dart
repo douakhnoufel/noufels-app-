@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/classifier_service.dart';
+import '../services/database_service.dart';
 import 'result_screen.dart';
 import 'live_camera_screen.dart';
+import 'history_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final ClassifierService classifier;
@@ -15,7 +17,18 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final ImagePicker _picker = ImagePicker();
+  final DatabaseService _db = DatabaseService();
   bool _isProcessing = false;
+
+  void _openHistory() {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => const HistoryScreen(),
+        transitionsBuilder: (_, anim, __, child) =>
+            FadeTransition(opacity: anim, child: child),
+      ),
+    );
+  }
 
   Future<void> _pickImage(ImageSource source) async {
     final XFile? file = await _picker.pickImage(
@@ -31,6 +44,14 @@ class _HomeScreenState extends State<HomeScreen> {
       final bytes = await file.readAsBytes();
       if (!mounted) return;
       final full = await widget.classifier.classifyBytes(bytes);
+
+      // Save to History
+      await _db.insertScan(ScanHistoryItem(
+        label: full.result.label,
+        confidence: full.result.confidence,
+        timestamp: DateTime.now(),
+        imageBytes: bytes,
+      ));
 
       if (mounted) {
         Navigator.of(context).push(
@@ -77,7 +98,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       body: Stack(
         children: [
-          // Background Gradient Decoration
           Positioned(
             top: -100,
             right: -100,
@@ -101,8 +121,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _Header(colorScheme: colorScheme, textTheme: textTheme)
-                          .animate().fadeIn(duration: 400.milliseconds).slideY(begin: -0.1),
+                      _Header(
+                        colorScheme: colorScheme, 
+                        textTheme: textTheme,
+                        onHistoryTap: _openHistory,
+                      ).animate().fadeIn(duration: 400.milliseconds).slideY(begin: -0.1),
                       
                       const SizedBox(height: 32),
                       
@@ -170,7 +193,8 @@ class _HomeScreenState extends State<HomeScreen> {
 class _Header extends StatelessWidget {
   final ColorScheme colorScheme;
   final TextTheme textTheme;
-  const _Header({required this.colorScheme, required this.textTheme});
+  final VoidCallback onHistoryTap;
+  const _Header({required this.colorScheme, required this.textTheme, required this.onHistoryTap});
 
   @override
   Widget build(BuildContext context) {
@@ -206,7 +230,7 @@ class _Header extends StatelessWidget {
               ),
             ),
             Text(
-              'AI POTATO MONITOR',
+              'SMART POTATO MONITOR',
               style: textTheme.labelSmall?.copyWith(
                 color: colorScheme.primary,
                 fontWeight: FontWeight.bold,
@@ -216,6 +240,11 @@ class _Header extends StatelessWidget {
           ],
         ),
         const Spacer(),
+        IconButton.filledTonal(
+          onPressed: onHistoryTap,
+          icon: const Icon(Icons.history_rounded, size: 22),
+        ),
+        const SizedBox(width: 8),
         IconButton.filledTonal(
           onPressed: () {},
           icon: const Icon(Icons.settings_outlined, size: 20),
@@ -263,7 +292,7 @@ class _HeroCard extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            'Protect your\ncrops with AI',
+            'Protect your\ncrops intelligently',
             style: textTheme.headlineSmall?.copyWith(
               color: Colors.white,
               fontWeight: FontWeight.w900,
@@ -442,7 +471,3 @@ class _LoadingOverlay extends StatelessWidget {
     );
   }
 }
-
-
-}
-

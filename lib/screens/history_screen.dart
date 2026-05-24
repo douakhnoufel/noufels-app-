@@ -1,0 +1,176 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import 'package:intl/intl.dart';
+import '../services/database_service.dart';
+import '../services/classifier_service.dart';
+import 'result_screen.dart';
+
+class HistoryScreen extends StatefulWidget {
+  const HistoryScreen({super.key});
+
+  @override
+  State<HistoryScreen> createState() => _HistoryScreenState();
+}
+
+class _HistoryScreenState extends State<HistoryScreen> {
+  final DatabaseService _db = DatabaseService();
+  final ClassifierService _classifier = ClassifierService();
+  List<ScanHistoryItem> _scans = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHistory();
+  }
+
+  Future<void> _loadHistory() async {
+    final scans = await _db.getScans();
+    if (mounted) {
+      setState(() {
+        _scans = scans;
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _deleteScan(int id) async {
+    await _db.deleteScan(id);
+    _loadHistory();
+  }
+
+  void _viewResult(ScanHistoryItem scan) {
+    // Reconstruct DetectionResult from history
+    final result = DetectionResult(
+      label: scan.label,
+      confidence: scan.confidence,
+      severity: _classifier.getSeverityFor(scan.label),
+      description: _classifier.getDescriptionFor(scan.label),
+      recommendations: _classifier.getRecommendationsFor(scan.label),
+      color: _classifier.getColorFor(scan.label),
+    );
+
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => ResultScreen(
+          imageBytes: scan.imageBytes,
+          result: result,
+          allProbabilities: {scan.label: scan.confidence},
+        ),
+        transitionsBuilder: (_, anim, __, child) =>
+            FadeTransition(opacity: anim, child: child),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return Scaffold(
+      backgroundColor: colorScheme.surface,
+      appBar: AppBar(
+        title: Text('SCAN HISTORY', 
+          style: textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w900, letterSpacing: 1.2)),
+        centerTitle: true,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _scans.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.history_rounded, size: 64, color: Colors.white12),
+                      const SizedBox(height: 16),
+                      Text('No history found', style: textTheme.bodyLarge?.copyWith(color: Colors.white38)),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.all(20),
+                  itemCount: _scans.length,
+                  itemBuilder: (context, index) {
+                    final scan = _scans[index];
+                    final color = _classifier.getColorFor(scan.label);
+                    
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(24),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () => _viewResult(scan),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Row(
+                                children: [
+                                  Hero(
+                                    tag: 'history_${scan.id}',
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(16),
+                                      child: Image.memory(
+                                        scan.imageBytes,
+                                        width: 80,
+                                        height: 80,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          scan.label,
+                                          style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Row(
+                                          children: [
+                                            Container(
+                                              width: 8,
+                                              height: 8,
+                                              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Text(
+                                              '${(scan.confidence * 100).toStringAsFixed(1)}% Match',
+                                              style: textTheme.labelSmall?.copyWith(color: color, fontWeight: FontWeight.bold),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          DateFormat('MMM dd, yyyy • hh:mm a').format(scan.timestamp),
+                                          style: textTheme.labelSmall?.copyWith(color: Colors.white38),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  IconButton(
+                                    onPressed: () => _deleteScan(scan.id!),
+                                    icon: const Icon(Icons.delete_outline_rounded, color: Colors.white24, size: 20),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ).animate().fadeIn(delay: (index * 50).milliseconds).slideX(begin: 0.1);
+                  },
+                ),
+    );
+  }
+}
