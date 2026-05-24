@@ -1,0 +1,39 @@
+name: potato_disease_app
+description: Potato Leaf Disease Detector using YOLOv8 + TFLite
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # TFLite inference
+  tflite_flutter:
+    path: packages/tflite_flutter
+
+  # Camera & image picking
+  camera: ^0.10.5+9
+  image_picker: ^1.1.2
+
+  # Image processing
+  image: ^4.1.7
+
+  # UI
+  cupertino_icons: ^1.0.8
+  google_fonts: ^6.2.1
+  flutter_animate: ^4.5.2
+  percent_indicator: ^4.2.5
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/models/

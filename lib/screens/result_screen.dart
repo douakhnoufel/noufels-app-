@@ -1,0 +1,438 @@
+import 'dart:typed_data';
+import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import 'package:percent_indicator/percent_indicator.dart';
+import '../services/classifier_service.dart';
+
+class ResultScreen extends StatelessWidget {
+  final Uint8List imageBytes;
+  final DetectionResult result;
+  final Map<String, double> allProbabilities;
+
+  const ResultScreen({
+    super.key,
+    required this.imageBytes,
+    required this.result,
+    required this.allProbabilities,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    
+    return Scaffold(
+      backgroundColor: colorScheme.surface,
+      body: Stack(
+        children: [
+          CustomScrollView(
+            physics: const BouncingScrollPhysics(),
+            slivers: [
+              SliverAppBar(
+                expandedHeight: 340,
+                pinned: true,
+                stretch: true,
+                backgroundColor: colorScheme.surface,
+                surfaceTintColor: Colors.transparent,
+                leading: GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: Container(
+                    margin: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.black45,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white10),
+                    ),
+                    child: const Icon(Icons.close, color: Colors.white, size: 20),
+                  ),
+                ),
+                flexibleSpace: FlexibleSpaceBar(
+                  stretchModes: const [StretchMode.zoomBackground],
+                  background: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Image.memory(
+                        imageBytes,
+                        fit: BoxFit.cover,
+                      ).animate().fadeIn(duration: 400.ms),
+                      Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.transparent,
+                              colorScheme.surface.withValues(alpha: 0.8),
+                              colorScheme.surface,
+                            ],
+                            stops: const [0.6, 0.9, 1.0],
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        bottom: 30,
+                        left: 20,
+                        right: 20,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'DETECTION RESULT',
+                              style: textTheme.labelSmall?.copyWith(
+                                color: Colors.white60,
+                                letterSpacing: 2,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ).animate().fadeIn(delay: 200.ms).slideX(begin: -0.1),
+                            const SizedBox(height: 8),
+                            Text(
+                              result.label,
+                              style: textTheme.headlineMedium?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ).animate().fadeIn(delay: 300.ms).slideX(begin: -0.1),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 120),
+                sliver: SliverList(
+                  delegate: SliverChildListDelegate([
+                    _SeverityBadge(result: result)
+                        .animate()
+                        .fadeIn(delay: 400.ms)
+                        .slideY(begin: 0.1),
+
+                    const SizedBox(height: 24),
+
+                    _InsightCard(
+                      title: 'Confidence Overview',
+                      child: _ConfidenceDonut(result: result),
+                    ).animate().fadeIn(delay: 500.ms),
+
+                    const SizedBox(height: 20),
+
+                    _InsightCard(
+                      title: 'Class Analysis',
+                      child: _ProbabilityList(probs: allProbabilities),
+                    ).animate().fadeIn(delay: 600.ms),
+
+                    const SizedBox(height: 20),
+
+                    _InsightCard(
+                      title: 'Diagnosis Details',
+                      icon: Icons.info_outline_rounded,
+                      child: Text(
+                        result.description,
+                        style: textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          height: 1.6,
+                        ),
+                      ),
+                    ).animate().fadeIn(delay: 700.ms),
+
+                    const SizedBox(height: 20),
+
+                    _InsightCard(
+                      title: 'Recommended Actions',
+                      icon: Icons.health_and_safety_outlined,
+                      child: _RecommendationsList(result: result),
+                    ).animate().fadeIn(delay: 800.ms),
+                  ]),
+                ),
+              ),
+            ],
+          ),
+
+          // Bottom Bar
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: _BottomActions(result: result),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Shared Components ──────────────────────────────────────────────────────
+
+class _InsightCard extends StatelessWidget {
+  final String title;
+  final IconData? icon;
+  final Widget child;
+
+  const _InsightCard({required this.title, this.icon, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: 18, color: colorScheme.primary),
+                const SizedBox(width: 8),
+              ],
+              Text(
+                title.toUpperCase(),
+                style: textTheme.labelSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: colorScheme.onSurface.withValues(alpha: 0.6),
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _SeverityBadge extends StatelessWidget {
+  final DetectionResult result;
+  const _SeverityBadge({required this.result});
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: result.color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: result.color.withValues(alpha: 0.4), width: 1.5),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            result.label == 'Healthy' ? Icons.verified_user : Icons.warning_rounded,
+            color: result.color,
+            size: 28,
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  result.severity.toUpperCase(),
+                  style: textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                    color: result.color,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                Text(
+                  result.label == 'Healthy' 
+                    ? 'Plant health is optimal' 
+                    : 'Action required to prevent spread',
+                  style: textTheme.bodySmall?.copyWith(
+                    color: Colors.white70,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ConfidenceDonut extends StatelessWidget {
+  final DetectionResult result;
+  const _ConfidenceDonut({required this.result});
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Center(
+      child: CircularPercentIndicator(
+        radius: 70.0,
+        lineWidth: 12.0,
+        animation: true,
+        percent: result.confidence.clamp(0.0, 1.0),
+        center: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '${(result.confidence * 100).toStringAsFixed(1)}%',
+              style: textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w900,
+                color: Colors.white,
+              ),
+            ),
+            Text(
+              'Match',
+              style: textTheme.labelSmall?.copyWith(color: Colors.white54),
+            ),
+          ],
+        ),
+        circularStrokeCap: CircularStrokeCap.round,
+        progressColor: result.color,
+        backgroundColor: Colors.white12,
+      ),
+    );
+  }
+}
+
+class _ProbabilityList extends StatelessWidget {
+  final Map<String, double> probs;
+  const _ProbabilityList({required this.probs});
+
+  static const Map<String, Color> _classColors = {
+    'Early Blight': Color(0xFFFF8C42),
+    'Late Blight': Color(0xFFE53935),
+    'Healthy': Color(0xFF43A047),
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Column(
+      children: probs.entries.map((e) {
+        final color = _classColors[e.key] ?? Colors.blueGrey;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(e.key, style: textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                  Text('${(e.value * 100).toStringAsFixed(1)}%', 
+                    style: textTheme.bodySmall?.copyWith(color: color, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              LinearPercentIndicator(
+                lineHeight: 6.0,
+                percent: e.value.clamp(0.0, 1.0),
+                backgroundColor: Colors.white10,
+                progressColor: color,
+                barRadius: const Radius.circular(10),
+                padding: EdgeInsets.zero,
+                animation: true,
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+class _RecommendationsList extends StatelessWidget {
+  final DetectionResult result;
+  const _RecommendationsList({required this.result});
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Column(
+      children: result.recommendations.asMap().entries.map((entry) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: result.color.withValues(alpha: 0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text(
+                    '${entry.key + 1}',
+                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: result.color),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  entry.value,
+                  style: textTheme.bodyMedium?.copyWith(color: Colors.white70, height: 1.4),
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+class _BottomActions extends StatelessWidget {
+  final DetectionResult result;
+  const _BottomActions({required this.result});
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 40, offset: const Offset(0, -10))
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton(
+              onPressed: () => Navigator.pop(context),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                side: BorderSide(color: colorScheme.outlineVariant),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              ),
+              child: const Text('DISMISS', style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1)),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: ElevatedButton(
+              onPressed: () {},
+              style: ElevatedButton.styleFrom(
+                backgroundColor: result.color,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                elevation: 0,
+              ),
+              child: const Text('SHARE REPORT', style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
