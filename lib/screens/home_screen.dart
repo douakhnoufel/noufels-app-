@@ -6,6 +6,7 @@ import '../services/database_service.dart';
 import 'result_screen.dart';
 import 'live_camera_screen.dart';
 import 'history_screen.dart';
+import 'drone_stream_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final ClassifierService classifier;
@@ -30,6 +31,26 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _openLiveCamera() {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => LiveCameraScreen(classifier: widget.classifier),
+        transitionsBuilder: (_, anim, __, child) =>
+            FadeTransition(opacity: anim, child: child),
+      ),
+    );
+  }
+
+  void _openDroneStream() {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => DroneStreamScreen(classifier: widget.classifier),
+        transitionsBuilder: (_, anim, __, child) =>
+            FadeTransition(opacity: anim, child: child),
+      ),
+    );
+  }
+
   Future<void> _pickImage(ImageSource source) async {
     final XFile? file = await _picker.pickImage(
       source: source,
@@ -45,7 +66,6 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       final full = await widget.classifier.classifyBytes(bytes);
 
-      // Save to History
       await _db.insertScan(ScanHistoryItem(
         label: full.result.label,
         confidence: full.result.confidence,
@@ -78,16 +98,6 @@ class _HomeScreenState extends State<HomeScreen> {
     } finally {
       if (mounted) setState(() => _isProcessing = false);
     }
-  }
-
-  void _openLiveCamera() {
-    Navigator.of(context).push(
-      PageRouteBuilder(
-        pageBuilder: (_, __, ___) => LiveCameraScreen(classifier: widget.classifier),
-        transitionsBuilder: (_, anim, __, child) =>
-            FadeTransition(opacity: anim, child: child),
-      ),
-    );
   }
 
   @override
@@ -168,9 +178,11 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       
                       const SizedBox(height: 16),
-                      
-                      _LiveActionButton(onTap: _openLiveCamera)
-                          .animate().fadeIn(delay: 700.milliseconds).slideY(begin: 0.1),
+
+                      _DiagnosisMethodRow(
+                        onLiveTap: _openLiveCamera,
+                        onDroneTap: _openDroneStream,
+                      ).animate().fadeIn(delay: 700.milliseconds).slideY(begin: 0.1),
                       
                       const SizedBox(height: 40),
                       
@@ -185,6 +197,45 @@ class _HomeScreenState extends State<HomeScreen> {
 
           if (_isProcessing) const _LoadingOverlay(),
         ],
+      ),
+    );
+  }
+}
+
+class _DiagnosisMethodRow extends StatelessWidget {
+  final VoidCallback onLiveTap;
+  final VoidCallback onDroneTap;
+  const _DiagnosisMethodRow({required this.onLiveTap, required this.onDroneTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(child: _LiveActionButton(onTap: onLiveTap)),
+        const SizedBox(width: 16),
+        _DroneActionButton(onTap: onDroneTap),
+      ],
+    );
+  }
+}
+
+class _DroneActionButton extends StatelessWidget {
+  final VoidCallback onTap;
+  const _DroneActionButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white10,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: IconButton(
+        onPressed: onTap,
+        padding: const EdgeInsets.all(20),
+        icon: Icon(Icons.airplanemode_active_rounded, color: colorScheme.primary),
       ),
     );
   }
@@ -382,7 +433,7 @@ class _LiveActionButton extends StatelessWidget {
         ),
         icon: const Icon(Icons.sensors_rounded),
         label: const Text(
-          'START LIVE SCANNING',
+          'LIVE SCAN',
           style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1),
         ),
       ),
