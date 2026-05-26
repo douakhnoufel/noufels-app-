@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
-import 'dart:typed_data';
 import 'package:tflite_flutter/tflite_flutter.dart';
 
 class InferenceEngine {
@@ -10,7 +9,9 @@ class InferenceEngine {
   final int? threads;
 
   Interpreter? _interpreter;
-  Float32List? _outputBuffer;
+  List<int>? _inputShape;
+  List<int>? _outputShape;
+  Object? _outputBuffer;
   bool _isLoaded = false;
   Future<void>? _loadFuture;
   Future<void> _queue = Future.value();
@@ -22,6 +23,28 @@ class InferenceEngine {
   });
 
   bool get isLoaded => _isLoaded;
+  List<int> get inputShape => _inputShape ?? const [];
+  List<int> get outputShape => _outputShape ?? const [];
+
+  int get inputSize {
+    final shape = _inputShape;
+    if (shape == null || shape.isEmpty) {
+      throw StateError('Model input shape is unavailable.');
+    }
+    if (shape.length == 4) {
+      if (shape[1] != shape[2]) {
+        throw StateError('Non-square input tensor shape: $shape');
+      }
+      return shape[1];
+    }
+    if (shape.length == 3) {
+      if (shape[0] != shape[1]) {
+        throw StateError('Non-square input tensor shape: $shape');
+      }
+      return shape[0];
+    }
+    throw StateError('Unsupported input tensor shape: $shape');
+  }
 
   Future<void> load() async {
     if (_isLoaded) return;
@@ -37,7 +60,9 @@ class InferenceEngine {
         modelPath,
         options: options,
       );
-      _outputBuffer = Float32List(numClasses);
+      _inputShape = _interpreter!.getInputTensor(0).shape;
+      _outputShape = _interpreter!.getOutputTensor(0).shape;
+      _outputBuffer = _buildOutputBuffer(_outputShape!);
       _isLoaded = true;
     } catch (e) {
       _loadFuture = null;
@@ -46,9 +71,13 @@ class InferenceEngine {
   }
 
   Future<T> runQueued<T>(
-    T Function(Interpreter interpreter, Float32List output) action,
+    T Function(Interpreter interpreter, Object output) action,
   ) {
-    final future = _queue.then((_) => action(_interpreter!, _outputBuffer!));
+    if (!_isLoaded || _interpreter == null || _outputBuffer == null) {
+      throw StateError('Interpreter not loaded.');
+    }
+    final outputBuffer = _outputBuffer!;
+    final future = _queue.then((_) => action(_interpreter!, outputBuffer));
     _queue = future.then((_) => null, onError: (_) => null);
     return future;
   }
@@ -57,8 +86,27 @@ class InferenceEngine {
     _interpreter?.close();
     _interpreter = null;
     _outputBuffer = null;
+    _inputShape = null;
+    _outputShape = null;
     _isLoaded = false;
     _loadFuture = null;
     _queue = Future.value();
+  }
+
+  Object _buildOutputBuffer(List<int> shape) {
+    if (shape.isEmpty) {
+      throw StateError('Output tensor shape is empty.');
+    }
+    if (shape.any((dim) => dim <= 0)) {
+      throw StateError('Output tensor has dynamic or invalid shape: $shape');
+    }
+    final elementCount = shape.fold(1, (acc, dim) => acc * dim);
+    if (elementCount <= 0) {
+      throw StateError('Output tensor has invalid element count: $shape');
+    }
+    // Create output buffer - TFLite interpreter expects it wrapped in a List
+    // if it's multi-dimensional, but we wrap it for consistency
+    final buffer = List<double>.filled(elementCount, 0.0);
+    return [buffer]; // Wrap in List for TFLite interpreter.run()
   }
 }

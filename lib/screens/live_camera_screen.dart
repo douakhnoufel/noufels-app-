@@ -96,6 +96,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
     try {
       final frame = _buildFrame(image);
       final result = await widget.classifier.classifyCameraFrame(frame);
+      debugPrint('[LiveCameraScreen] Frame inference result: ${result.label} (${result.confidence})');
 
       if (mounted) {
         final double currentConf = result.confidence;
@@ -125,7 +126,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
         }
       }
     } catch (e) {
-      // ignore
+      debugPrint('[LiveCameraScreen] Frame error: $e');
     } finally {
       _isDetecting = false;
     }
@@ -179,7 +180,9 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
       await _controller!.stopImageStream();
       final XFile photo = await _controller!.takePicture();
       final bytes = await photo.readAsBytes();
+      debugPrint('[LiveCameraScreen] Photo captured, bytes: ${bytes.length}');
       final full = await widget.classifier.classifyBytes(bytes);
+      debugPrint('[LiveCameraScreen] Capture inference result: ${full.result.label} (${full.result.confidence})');
 
       // Save to History
       await _db.insertScan(ScanHistoryItem(
@@ -190,6 +193,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
       ));
 
       if (mounted) {
+        debugPrint('[LiveCameraScreen] Pushing ResultScreen');
         Navigator.of(context).push(PageRouteBuilder(
           pageBuilder: (_, __, ___) => ResultScreen(imageBytes: bytes, result: full.result, allProbabilities: full.probabilities),
           transitionsBuilder: (_, anim, __, child) => FadeTransition(opacity: anim, child: child),
@@ -200,6 +204,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
         });
       }
     } catch (e) {
+      debugPrint('[LiveCameraScreen] Capture error: $e');
       if (_controller != null && _isInitialized) await _controller!.startImageStream(_onCameraFrame);
     }
   }

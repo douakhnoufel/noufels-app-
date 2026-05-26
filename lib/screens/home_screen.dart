@@ -64,7 +64,9 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final bytes = await file.readAsBytes();
       if (!mounted) return;
+      debugPrint('[HomeScreen] Image selected, bytes: ${bytes.length}');
       final full = await widget.classifier.classifyBytes(bytes);
+      debugPrint('[HomeScreen] Classification result: ${full.result.label} (${full.result.confidence})');
 
       await _db.insertScan(ScanHistoryItem(
         label: full.result.label,
@@ -74,6 +76,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ));
 
       if (mounted) {
+        debugPrint('[HomeScreen] Pushing ResultScreen');
         Navigator.of(context).push(
           PageRouteBuilder(
             pageBuilder: (_, __, ___) => ResultScreen(
@@ -87,6 +90,7 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       }
     } catch (e) {
+      debugPrint('[HomeScreen] Error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -267,30 +271,41 @@ class _Header extends StatelessWidget {
               )
             ],
           ),
-          child: const Icon(Icons.eco_rounded, color: Colors.white, size: 24),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.asset(
+              'assets/images/app_icon.jpg',
+              fit: BoxFit.cover,
+            ),
+          ),
         ),
         const SizedBox(width: 16),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'PlantGuard',
-              style: textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w900,
-                letterSpacing: -0.5,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'PlantGuard',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -0.5,
+                ),
               ),
-            ),
-            Text(
-              'SMART POTATO MONITOR',
-              style: textTheme.labelSmall?.copyWith(
-                color: colorScheme.primary,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1,
+              Text(
+                'SMART POTATO MONITOR',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: textTheme.labelSmall?.copyWith(
+                  color: colorScheme.primary,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-        const Spacer(),
         IconButton.filledTonal(
           onPressed: onHistoryTap,
           icon: const Icon(Icons.history_rounded, size: 22),
@@ -319,7 +334,9 @@ class _HeroCard extends StatelessWidget {
         color: colorScheme.primary,
         borderRadius: BorderRadius.circular(32),
         image: const DecorationImage(
-          image: NetworkImage('https://images.unsplash.com/photo-1518977676601-b53f02bad67b?q=80&w=2070&auto=format&fit=crop'),
+          image: AssetImage(
+            'assets/images/stock-vector-vector-cartoon-cute-potato-icon-isolated-on-white-background-1263234916.jpg',
+          ),
           fit: BoxFit.cover,
           colorFilter: ColorFilter.mode(
             Colors.black45,

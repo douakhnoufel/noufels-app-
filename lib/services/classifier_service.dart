@@ -38,7 +38,7 @@ class FullInferenceResult {
 class ClassifierService {
   static const String _modelPath =
       'assets/models/best_float32.tflite';
-  static const int _inputSize = 224;
+  static const int _defaultInputSize = 224;
   static const int _numClasses = 3;
 
   static const List<String> _labels = [
@@ -97,23 +97,34 @@ class ClassifierService {
     Color(0xFF43A047), // green  - healthy
   ];
 
-  final ImagePreprocessor _preprocessor;
+  ImagePreprocessor _preprocessor;
   final InferenceEngine _engine;
+  int _inputSize;
 
   ClassifierService({
     ImagePreprocessor? preprocessor,
     InferenceEngine? engine,
-  })  : _preprocessor =
-            preprocessor ?? const ImagePreprocessor(inputSize: _inputSize),
+  })  : _inputSize = _defaultInputSize,
+        _preprocessor =
+            preprocessor ?? const ImagePreprocessor(inputSize: _defaultInputSize),
         _engine = engine ??
             InferenceEngine(
               modelPath: _modelPath,
               numClasses: _numClasses,
             );
 
-  Future<void> loadModel() => _engine.load();
+  Future<void> loadModel() => _ensureModelLoaded();
 
   bool get isLoaded => _engine.isLoaded;
+
+  Future<void> _ensureModelLoaded() async {
+    await _engine.load();
+    final resolvedInputSize = _engine.inputSize;
+    if (resolvedInputSize != _inputSize) {
+      _inputSize = resolvedInputSize;
+      _preprocessor = ImagePreprocessor(inputSize: _inputSize);
+    }
+  }
 
   /// Run inference on a File
   Future<DetectionResult> classifyImage(File imageFile) async {
@@ -123,26 +134,34 @@ class ClassifierService {
 
   /// Run inference on encoded image bytes (jpg/png)
   Future<FullInferenceResult> classifyBytes(Uint8List bytes) async {
-    await _engine.load();
+    debugPrint('[ClassifierService] classifyBytes called with ${bytes.length} bytes');
+    await _ensureModelLoaded();
+    debugPrint('[ClassifierService] Model loaded, input size: $_inputSize');
     final input = await _preprocessor.fromBytes(bytes);
-    return _engine.runQueued(
+    debugPrint('[ClassifierService] Image preprocessed: ${input.length} elements');
+    final result = await _engine.runQueued(
       (interpreter, output) => _runInference(interpreter, output, input),
     );
+    debugPrint('[ClassifierService] Inference complete: ${result.result.label} (${result.result.confidence})');
+    return result;
   }
 
   /// Run inference on camera frame without JPEG re-encoding
   Future<DetectionResult> classifyCameraFrame(CameraFrame frame) async {
-    await _engine.load();
+    debugPrint('[ClassifierService] classifyCameraFrame called');
+    await _ensureModelLoaded();
     final input = await _preprocessor.fromCameraFrame(frame);
+    debugPrint('[ClassifierService] Camera frame preprocessed: ${input.length} elements');
     final full = await _engine.runQueued(
       (interpreter, output) => _runInference(interpreter, output, input),
     );
+    debugPrint('[ClassifierService] Frame inference complete: ${full.result.label} (${full.result.confidence})');
     return full.result;
   }
 
   /// Single-pass file inference (result + probabilities)
   Future<FullInferenceResult> classify(File imageFile) async {
-    await _engine.load();
+    await _ensureModelLoaded();
     final bytes = await imageFile.readAsBytes();
     final input = await _preprocessor.fromBytes(bytes);
     return _engine.runQueued(
@@ -152,53 +171,82 @@ class ClassifierService {
 
   FullInferenceResult _runInference(
     Interpreter interpreter,
-    Float32List output,
+    Object output,
     Float32List input,
   ) {
-    interpreter.run(input, output);
+    try {
+      final inputShape = _engine.inputShape;
+      debugPrint('[ClassifierService] Input shape: $inputShape, Input length: ${input.length}');
+      
+      // Run inference - input is Float32List, output is [List<double>]
+      interpreter.run(input, output);
+      debugPrint('[ClassifierService] Inference completed');
 
-    // If the model already outputs probabilities (sums to ~1.0), use them directly.
-    // Otherwise, apply softmax to the logits.
-    double sum = 0;
-    for (int i = 0; i < output.length; i++) {
-      sum += output[i];
-    }
-
-    final List<double> probs;
-    if ((sum - 1.0).abs() < 0.05) {
-      probs = output.toList();
-    } else {
-      probs = _softmax(output);
-    }
-
-    var bestIdx = 0;
-    for (var i = 1; i < probs.length; i++) {
-      if (probs[i] > probs[bestIdx]) {
-        bestIdx = i;
+      // Extract output values from the wrapped list
+      final outputValues = _flattenOutput(output);
+      debugPrint('[ClassifierService] Output flattened: $outputValues');
+      
+      if (outputValues.length != _labels.length) {
+        throw StateError(
+          'Model output size mismatch. Expected ${_labels.length} values but got ${outputValues.length}.',
+        );
       }
+
+      // If the model already outputs probabilities (sums to ~1.0), use them directly.
+      // Otherwise, apply softmax to the logits.
+      double sum = 0;
+      for (int i = 0; i < outputValues.length; i++) {
+        sum += outputValues[i];
+      }
+
+      debugPrint('[ClassifierService] Output sum: $sum');
+
+      final List<double> probs;
+      if ((sum - 1.0).abs() < 0.05) {
+        probs = outputValues;
+        debugPrint('[ClassifierService] Using raw outputs as probabilities');
+      } else {
+        probs = _softmax(outputValues);
+        debugPrint('[ClassifierService] Applied softmax to outputs');
+      }
+
+      debugPrint('[ClassifierService] Probabilities: $probs');
+
+      var bestIdx = 0;
+      for (var i = 1; i < probs.length; i++) {
+        if (probs[i] > probs[bestIdx]) {
+          bestIdx = i;
+        }
+      }
+
+      debugPrint('[ClassifierService] Best index: $bestIdx, Label: ${_labels[bestIdx]}, Confidence: ${probs[bestIdx]}');
+
+      final result = DetectionResult(
+        label: _labels[bestIdx],
+        confidence: probs[bestIdx],
+        severity: _severities[bestIdx],
+        description: _descriptions[bestIdx],
+        recommendations: _recommendations[bestIdx],
+        color: _colors[bestIdx],
+      );
+
+      final probabilities = <String, double>{};
+      for (var i = 0; i < _labels.length; i++) {
+        probabilities[_labels[i]] = probs[i];
+      }
+
+      return FullInferenceResult(
+        result: result,
+        probabilities: probabilities,
+      );
+    } catch (e, stackTrace) {
+      debugPrint('[ClassifierService] Inference error: $e');
+      debugPrintStack(stackTrace: stackTrace);
+      rethrow;
     }
-
-    final result = DetectionResult(
-      label: _labels[bestIdx],
-      confidence: probs[bestIdx],
-      severity: _severities[bestIdx],
-      description: _descriptions[bestIdx],
-      recommendations: _recommendations[bestIdx],
-      color: _colors[bestIdx],
-    );
-
-    final probabilities = <String, double>{};
-    for (var i = 0; i < _labels.length; i++) {
-      probabilities[_labels[i]] = probs[i];
-    }
-
-    return FullInferenceResult(
-      result: result,
-      probabilities: probabilities,
-    );
   }
 
-  List<double> _softmax(Float32List scores) {
+  List<double> _softmax(List<double> scores) {
     final maxScore = scores.reduce(max);
     final expScores = List<double>.filled(scores.length, 0.0);
     var sum = 0.0;
@@ -211,6 +259,33 @@ class ClassifierService {
       expScores[i] = expScores[i] / sum;
     }
     return expScores;
+  }
+
+  List<double> _flattenOutput(Object output) {
+    if (output is List<double>) {
+      if (output.isEmpty) {
+        throw StateError('Model output buffer is empty.');
+      }
+      return output;
+    }
+    if (output is List) {
+      if (output.isEmpty) {
+        throw StateError('Model output buffer is empty.');
+      }
+      final first = output[0];
+      if (first is List<double>) {
+        return first;
+      }
+      if (first is double) {
+        return output.cast<double>();
+      }
+      final values = output.flatten<num>();
+      if (values.isEmpty) {
+        throw StateError('Model output buffer is empty.');
+      }
+      return values.map((value) => value.toDouble()).toList();
+    }
+    throw StateError('Unsupported output buffer type: ${output.runtimeType}.');
   }
 
   String getSeverityFor(String label) {
