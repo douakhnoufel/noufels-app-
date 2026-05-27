@@ -45,7 +45,6 @@ class _PlantGuardAppState extends State<PlantGuardApp> {
           surface: const Color(0xFF0A0E0A),
         ),
         textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
-        // Fix: Use CardThemeData-compatible properties or the specific CardTheme constructor
         cardTheme: CardThemeData(
           color: const Color(0xFF141A14),
           elevation: 0,

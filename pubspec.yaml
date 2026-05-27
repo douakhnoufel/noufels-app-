@@ -1,4 +1,4 @@
-name: potato_disease_app
+name: nouphptt
 description: Potato Leaf Disease Detector using YOLOv8 + TFLite
 publish_to: 'none'
 version: 1.0.0+1
@@ -43,8 +43,8 @@ dev_dependencies:
 
 flutter_launcher_icons:
   android: "launcher_icon"
-  ios: true
-  image_path: "assets/images/app_icon.png"
+  ios: false
+  image_path: "assets/images/app_icon.jpg"
   min_sdk_android: 21
 
 flutter:

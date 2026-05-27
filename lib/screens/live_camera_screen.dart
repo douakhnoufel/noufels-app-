@@ -32,7 +32,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
   Color _labelColor = Colors.white70;
 
   // Thresholds
-  static const double _confidenceThreshold = 0.45;
+  static const double _confidenceThreshold = 0.30;
   static const double _vibrationThreshold = 0.85;
   String _lastVibratedLabel = '';
 
@@ -109,7 +109,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
 
         // Haptic Feedback Logic
         if (isCertain && currentConf >= _vibrationThreshold && _lastVibratedLabel != result.label) {
-          if (await Vibration.hasVibrator() ?? false) {
+          if (await Vibration.hasVibrator()) {
             Vibration.vibrate(duration: 100);
           }
           _lastVibratedLabel = result.label;

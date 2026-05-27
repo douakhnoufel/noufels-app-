@@ -5,7 +5,7 @@ import 'package:nouphptt/services/classifier_service.dart';
 void main() {
   group('ClassifierService Output Processing', () {
     test('DetectionResult creation with valid confidence', () {
-      final result = DetectionResult(
+      const result = DetectionResult(
         label: 'Healthy',
         confidence: 0.95,
         severity: 'No Disease',
@@ -20,7 +20,7 @@ void main() {
     });
 
     test('FullInferenceResult wraps detection result and probabilities', () {
-      final detection = DetectionResult(
+      const detection = DetectionResult(
         label: 'Early Blight',
         confidence: 0.75,
         severity: 'Moderate Risk',

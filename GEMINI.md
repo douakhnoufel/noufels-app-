@@ -44,10 +44,10 @@ The project also contains a secondary React Native project (`PotatoDetector/`), 
 - **Build iOS IPA:** `flutter build ipa --release`
 
 ### Android Configuration Note
-The `android/app/build.gradle` file must include the following to prevent TFLite model compression:
-```gradle
-aaptOptions {
-    noCompress "tflite"
+The `android/app/build.gradle.kts` file must include the following to prevent TFLite model compression:
+```kotlin
+androidResources {
+    noCompress += "tflite"
 }
 ```
 
@@ -57,7 +57,7 @@ aaptOptions {
 
 - **State Management:** The app primarily uses local state and constructor-based dependency injection for services.
 - **Orientation:** Locked to **Portrait** mode via `SystemChrome`.
-- **Model Assets:** The TFLite model is located at `assets/models/potato_disease_detector.tflite`.
+- **Model Assets:** The app currently loads `assets/models/best_float32.tflite` from `ClassifierService`.
 - **Testing:**
   - Standard widget tests are in `test/`.
   - Manual verification is recommended using images from the PlantVillage dataset.

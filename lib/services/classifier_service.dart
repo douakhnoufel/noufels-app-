@@ -178,8 +178,12 @@ class ClassifierService {
       final inputShape = _engine.inputShape;
       debugPrint('[ClassifierService] Input shape: $inputShape, Input length: ${input.length}');
       
-      // Run inference - input is Float32List, output is [List<double>]
-      interpreter.run(input, output);
+      // Run inference with raw bytes to avoid tflite_flutter resizing input to 1D.
+      final inputBytes = input.buffer.asUint8List(
+        input.offsetInBytes,
+        input.lengthInBytes,
+      );
+      interpreter.run(inputBytes, output);
       debugPrint('[ClassifierService] Inference completed');
 
       // Extract output values from the wrapped list

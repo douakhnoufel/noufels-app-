@@ -73,10 +73,12 @@ class _SplashScreenState extends State<SplashScreen> {
                     width: 1.5,
                   ),
                 ),
-                child: Icon(
-                  Icons.agriculture_outlined,
-                  size: 54,
-                  color: colorScheme.primary,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(24),
+                  child: Image.asset(
+                    'assets/images/app_icon.jpg',
+                    fit: BoxFit.cover,
+                  ),
                 ),
               ),
               const SizedBox(height: 32),
