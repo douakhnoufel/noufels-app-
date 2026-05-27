@@ -29,7 +29,6 @@ dependencies:
   sqflite: ^2.4.2+1
   path: ^1.9.1
   shared_preferences: ^2.5.5
-  vibration: ^3.1.8
   intl: ^0.20.2
   share_plus: ^12.0.2
   path_provider: ^2.1.5
@@ -40,9 +39,6 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^4.0.0
   flutter_launcher_icons: ^0.14.4
-
-dependency_overrides:
-  device_info_plus: 12.4.0
 
 flutter_launcher_icons:
   android: "launcher_icon"

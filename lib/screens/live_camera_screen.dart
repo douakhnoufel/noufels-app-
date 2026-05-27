@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:vibration/vibration.dart';
+import 'package:flutter/services.dart';
 import '../services/classifier_service.dart';
 import '../services/image_preprocessor.dart';
 import '../services/database_service.dart';
@@ -109,9 +109,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen>
 
         // Haptic Feedback Logic
         if (isCertain && currentConf >= _vibrationThreshold && _lastVibratedLabel != result.label) {
-          if (await Vibration.hasVibrator()) {
-            Vibration.vibrate(duration: 100);
-          }
+          HapticFeedback.mediumImpact();
           _lastVibratedLabel = result.label;
         } else if (!isCertain) {
           _lastVibratedLabel = '';
