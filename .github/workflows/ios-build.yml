@@ -1,36 +1,90 @@
-name: iOS Build
+name: Build iOS IPA
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
+    paths:
+      - ".github/workflows/ios-build.yml"
+      - "assets/**"
+      - "ios/**"
+      - "lib/**"
+      - "packages/**"
+      - "pubspec.yaml"
+      - "pubspec.lock"
+
+concurrency:
+  group: ios-ipa-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build-ios:
+  build-unsigned-ipa:
+    name: Build unsigned IPA
     runs-on: macos-latest
+    timeout-minutes: 45
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Install Flutter stable
+      - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
 
+      - name: Show tool versions
+        run: |
+          flutter --version
+          xcodebuild -version
+
       - name: Get Flutter dependencies
         run: flutter pub get
 
-      - name: Enable iOS platform
-        run: flutter config --enable-ios
+      - name: Analyze Dart code
+        run: flutter analyze
 
-      - name: Build iOS release
+      - name: Run tests
+        run: flutter test
+
+      - name: Install CocoaPods dependencies
+        working-directory: ios
+        run: pod install --repo-update
+
+      - name: Build iOS app without code signing
         run: flutter build ios --release --no-codesign
 
-      - name: Upload iOS build output
+      - name: Package unsigned IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APP_PATH="$(find build/ios/iphoneos -maxdepth 1 -type d -name '*.app' | head -n 1)"
+          if [[ -z "${APP_PATH}" ]]; then
+            echo "No .app bundle found in build/ios/iphoneos" >&2
+            exit 1
+          fi
+
+          IPA_DIR="build/ios/ipa"
+          IPA_PATH="build/ios/PlantGuard-unsigned.ipa"
+
+          rm -rf "${IPA_DIR}" "${IPA_PATH}"
+          mkdir -p "${IPA_DIR}/Payload"
+          cp -R "${APP_PATH}" "${IPA_DIR}/Payload/"
+
+          (
+            cd "${IPA_DIR}"
+            ditto -c -k --sequesterRsrc --keepParent Payload "../PlantGuard-unsigned.ipa"
+          )
+
+          ls -lh "${IPA_PATH}"
+          unzip -l "${IPA_PATH}" | head -n 20
+
+      - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ios-build-output
-          path: build/ios/iphoneos
+          name: PlantGuard-unsigned-ipa
+          path: build/ios/PlantGuard-unsigned.ipa
           if-no-files-found: error
+          retention-days: 14

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_vlc_player/flutter_vlc_player.dart';
 import '../services/classifier_service.dart';
+import '../widgets/yolo_box_overlay.dart';
 
 class DroneStreamScreen extends StatefulWidget {
   final ClassifierService classifier;
@@ -18,12 +19,13 @@ class _DroneStreamScreenState extends State<DroneStreamScreen> {
   final TextEditingController _urlController = TextEditingController(
     text: 'rtmp://192.168.1.10/live/drone',
   );
-  
+
   bool _isPlaying = false;
   bool _isDetecting = false;
   String _label = 'Waiting for stream...';
   double _confidence = 0.0;
   Color _labelColor = Colors.white70;
+  List<YoloDetection> _detections = const [];
 
   @override
   void dispose() {
@@ -53,7 +55,9 @@ class _DroneStreamScreenState extends State<DroneStreamScreen> {
 
   void _startInferenceLoop() async {
     while (_isPlaying && mounted) {
-      if (!_isDetecting && _vlcController != null && _vlcController!.value.isPlaying) {
+      if (!_isDetecting &&
+          _vlcController != null &&
+          _vlcController!.value.isPlaying) {
         _runInferenceOnFrame();
       }
       await Future.delayed(const Duration(milliseconds: 500));
@@ -62,24 +66,26 @@ class _DroneStreamScreenState extends State<DroneStreamScreen> {
 
   Future<void> _runInferenceOnFrame() async {
     if (!mounted || _isDetecting || _vlcController == null) return;
-    
+
     _isDetecting = true;
     try {
       final Uint8List? imageBytes = await _vlcController!.takeSnapshot();
-      
+
       if (imageBytes != null && mounted) {
         final full = await widget.classifier.classifyBytes(imageBytes);
-        
+
         if (mounted) {
           setState(() {
             if (full.result.confidence > 0.45) {
               _label = full.result.label;
               _confidence = full.result.confidence;
               _labelColor = full.result.color;
+              _detections = full.detections;
             } else {
               _label = 'Scanning Field...';
               _confidence = 0.0;
               _labelColor = Colors.white70;
+              _detections = const [];
             }
           });
         }
@@ -98,7 +104,9 @@ class _DroneStreamScreenState extends State<DroneStreamScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: const Text('DRONE GROUND STATION', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, letterSpacing: 1.5)),
+        title: const Text('DRONE GROUND STATION',
+            style: TextStyle(
+                fontWeight: FontWeight.w900, fontSize: 14, letterSpacing: 1.5)),
         backgroundColor: Colors.transparent,
         elevation: 0,
       ),
@@ -117,21 +125,27 @@ class _DroneStreamScreenState extends State<DroneStreamScreen> {
                       fillColor: Colors.white10,
                       hintText: 'Enter RTMP URL',
                       hintStyle: const TextStyle(color: Colors.white24),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none),
                     ),
                   ),
                 ),
                 const SizedBox(width: 12),
                 IconButton.filled(
                   onPressed: _toggleStream,
-                  icon: Icon(_isPlaying ? Icons.stop_rounded : Icons.play_arrow_rounded),
-                  style: IconButton.styleFrom(backgroundColor: _isPlaying ? Colors.red : colorScheme.primary),
+                  icon: Icon(_isPlaying
+                      ? Icons.stop_rounded
+                      : Icons.play_arrow_rounded),
+                  style: IconButton.styleFrom(
+                      backgroundColor:
+                          _isPlaying ? Colors.red : colorScheme.primary),
                 ),
               ],
             ),
           ),
-
           Expanded(
             child: Container(
               margin: const EdgeInsets.all(20),
@@ -149,35 +163,44 @@ class _DroneStreamScreenState extends State<DroneStreamScreen> {
                       VlcPlayer(
                         controller: _vlcController!,
                         aspectRatio: 16 / 9,
-                        placeholder: const Center(child: CircularProgressIndicator()),
+                        placeholder:
+                            const Center(child: CircularProgressIndicator()),
                       )
                     else
-                      const Center(child: Icon(Icons.videocam_off_outlined, color: Colors.white12, size: 48)),
-                    
+                      const Center(
+                          child: Icon(Icons.videocam_off_outlined,
+                              color: Colors.white12, size: 48)),
+                    if (_isPlaying) _DroneScanningOverlay(color: _labelColor),
                     if (_isPlaying)
-                      _DroneScanningOverlay(color: _labelColor),
-
+                      YoloBoxOverlay(
+                        detections: _detections,
+                        fit: BoxFit.contain,
+                        minConfidence: 0.20,
+                      ),
                     Positioned(
                       top: 20,
                       left: 20,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
                         decoration: BoxDecoration(
                           color: _labelColor.withValues(alpha: 0.8),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
                           _label,
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                          style: const TextStyle(
+                              color: Colors.white, fontWeight: FontWeight.bold),
                         ),
-                      ).animate(key: ValueKey(_label)).scale(duration: 200.milliseconds),
+                      )
+                          .animate(key: ValueKey(_label))
+                          .scale(duration: 200.milliseconds),
                     ),
                   ],
                 ),
               ),
             ),
           ),
-
           Container(
             padding: const EdgeInsets.all(24),
             child: Column(
@@ -186,14 +209,20 @@ class _DroneStreamScreenState extends State<DroneStreamScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const _HudStat(label: 'ALTITUDE', value: '--- m'),
-                    _HudStat(label: 'CONFIDENCE', value: '${(_confidence * 100).toStringAsFixed(1)}%'),
+                    _HudStat(
+                        label: 'CONFIDENCE',
+                        value: '${(_confidence * 100).toStringAsFixed(1)}%'),
                     const _HudStat(label: 'MODE', value: 'RTMP LIVE'),
                   ],
                 ),
                 const SizedBox(height: 32),
                 const Text(
                   'MAVIC AIR 2 REMOTE FEED',
-                  style: TextStyle(color: Colors.white24, fontSize: 10, letterSpacing: 2, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                      color: Colors.white24,
+                      fontSize: 10,
+                      letterSpacing: 2,
+                      fontWeight: FontWeight.bold),
                 ),
               ],
             ),
@@ -214,9 +243,17 @@ class _HudStat extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.w800)),
+        Text(label,
+            style: const TextStyle(
+                color: Colors.white38,
+                fontSize: 10,
+                fontWeight: FontWeight.w800)),
         const SizedBox(height: 4),
-        Text(value, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w900)),
+        Text(value,
+            style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w900)),
       ],
     );
   }
@@ -235,7 +272,11 @@ class _DroneScanningOverlay extends StatelessWidget {
           height: 2,
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [color.withValues(alpha: 0), color, color.withValues(alpha: 0)],
+              colors: [
+                color.withValues(alpha: 0),
+                color,
+                color.withValues(alpha: 0)
+              ],
             ),
           ),
         ).animate(onPlay: (c) => c.repeat()).moveY(

@@ -100,13 +100,17 @@ class InferenceEngine {
     if (shape.any((dim) => dim <= 0)) {
       throw StateError('Output tensor has dynamic or invalid shape: $shape');
     }
-    final elementCount = shape.fold(1, (acc, dim) => acc * dim);
-    if (elementCount <= 0) {
-      throw StateError('Output tensor has invalid element count: $shape');
+    return _buildNestedOutput(shape, 0);
+  }
+
+  Object _buildNestedOutput(List<int> shape, int depth) {
+    final length = shape[depth];
+    if (depth == shape.length - 1) {
+      return List<double>.filled(length, 0.0);
     }
-    // Create output buffer - TFLite interpreter expects it wrapped in a List
-    // if it's multi-dimensional, but we wrap it for consistency
-    final buffer = List<double>.filled(elementCount, 0.0);
-    return [buffer]; // Wrap in List for TFLite interpreter.run()
+    return List<Object>.generate(
+      length,
+      (_) => _buildNestedOutput(shape, depth + 1),
+    );
   }
 }

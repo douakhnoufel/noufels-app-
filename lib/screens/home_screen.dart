@@ -34,7 +34,8 @@ class _HomeScreenState extends State<HomeScreen> {
   void _openLiveCamera() {
     Navigator.of(context).push(
       PageRouteBuilder(
-        pageBuilder: (_, __, ___) => LiveCameraScreen(classifier: widget.classifier),
+        pageBuilder: (_, __, ___) =>
+            LiveCameraScreen(classifier: widget.classifier),
         transitionsBuilder: (_, anim, __, child) =>
             FadeTransition(opacity: anim, child: child),
       ),
@@ -44,7 +45,8 @@ class _HomeScreenState extends State<HomeScreen> {
   void _openDroneStream() {
     Navigator.of(context).push(
       PageRouteBuilder(
-        pageBuilder: (_, __, ___) => DroneStreamScreen(classifier: widget.classifier),
+        pageBuilder: (_, __, ___) =>
+            DroneStreamScreen(classifier: widget.classifier),
         transitionsBuilder: (_, anim, __, child) =>
             FadeTransition(opacity: anim, child: child),
       ),
@@ -66,7 +68,8 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       debugPrint('[HomeScreen] Image selected, bytes: ${bytes.length}');
       final full = await widget.classifier.classifyBytes(bytes);
-      debugPrint('[HomeScreen] Classification result: ${full.result.label} (${full.result.confidence})');
+      debugPrint(
+          '[HomeScreen] Classification result: ${full.result.label} (${full.result.confidence})');
 
       await _db.insertScan(ScanHistoryItem(
         label: full.result.label,
@@ -83,6 +86,7 @@ class _HomeScreenState extends State<HomeScreen> {
               imageBytes: bytes,
               result: full.result,
               allProbabilities: full.probabilities,
+              detections: full.detections,
             ),
             transitionsBuilder: (_, anim, __, child) =>
                 FadeTransition(opacity: anim, child: child),
@@ -108,7 +112,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
-    
+
     return Scaffold(
       body: Stack(
         children: [
@@ -122,32 +126,35 @@ class _HomeScreenState extends State<HomeScreen> {
                 shape: BoxShape.circle,
                 color: colorScheme.primary.withValues(alpha: 0.08),
               ),
-            ).animate(onPlay: (c) => c.repeat(reverse: true))
-             .scale(duration: 3.seconds, begin: const Offset(1, 1), end: const Offset(1.2, 1.2)),
+            ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(
+                duration: 3.seconds,
+                begin: const Offset(1, 1),
+                end: const Offset(1.2, 1.2)),
           ),
-          
           SafeArea(
             child: Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 600),
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _Header(
-                        colorScheme: colorScheme, 
+                        colorScheme: colorScheme,
                         textTheme: textTheme,
                         onHistoryTap: _openHistory,
-                      ).animate().fadeIn(duration: 400.milliseconds).slideY(begin: -0.1),
-                      
+                      )
+                          .animate()
+                          .fadeIn(duration: 400.milliseconds)
+                          .slideY(begin: -0.1),
                       const SizedBox(height: 32),
-                      
                       _HeroCard(colorScheme: colorScheme, textTheme: textTheme)
-                          .animate().fadeIn(delay: 200.milliseconds).scale(begin: const Offset(0.95, 0.95)),
-                      
+                          .animate()
+                          .fadeIn(delay: 200.milliseconds)
+                          .scale(begin: const Offset(0.95, 0.95)),
                       const SizedBox(height: 40),
-                      
                       Text(
                         'DIAGNOSIS METHODS',
                         style: textTheme.labelSmall?.copyWith(
@@ -156,9 +163,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           letterSpacing: 1.5,
                         ),
                       ).animate().fadeIn(delay: 400.milliseconds),
-                      
                       const SizedBox(height: 16),
-                      
                       Row(
                         children: [
                           Expanded(
@@ -167,7 +172,10 @@ class _HomeScreenState extends State<HomeScreen> {
                               label: 'Capture',
                               subtitle: 'Instant Photo',
                               onTap: () => _pickImage(ImageSource.camera),
-                            ).animate().fadeIn(delay: 500.milliseconds).slideX(begin: -0.1),
+                            )
+                                .animate()
+                                .fadeIn(delay: 500.milliseconds)
+                                .slideX(begin: -0.1),
                           ),
                           const SizedBox(width: 16),
                           Expanded(
@@ -176,29 +184,32 @@ class _HomeScreenState extends State<HomeScreen> {
                               label: 'Gallery',
                               subtitle: 'From Storage',
                               onTap: () => _pickImage(ImageSource.gallery),
-                            ).animate().fadeIn(delay: 600.milliseconds).slideX(begin: 0.1),
+                            )
+                                .animate()
+                                .fadeIn(delay: 600.milliseconds)
+                                .slideX(begin: 0.1),
                           ),
                         ],
                       ),
-                      
                       const SizedBox(height: 16),
-
                       _DiagnosisMethodRow(
                         onLiveTap: _openLiveCamera,
                         onDroneTap: _openDroneStream,
-                      ).animate().fadeIn(delay: 700.milliseconds).slideY(begin: 0.1),
-                      
+                      )
+                          .animate()
+                          .fadeIn(delay: 700.milliseconds)
+                          .slideY(begin: 0.1),
                       const SizedBox(height: 40),
-                      
-                      _SupportedSection(colorScheme: colorScheme, textTheme: textTheme)
-                          .animate().fadeIn(delay: 900.milliseconds),
+                      _SupportedSection(
+                              colorScheme: colorScheme, textTheme: textTheme)
+                          .animate()
+                          .fadeIn(delay: 900.milliseconds),
                     ],
                   ),
                 ),
               ),
             ),
           ),
-
           if (_isProcessing) const _LoadingOverlay(),
         ],
       ),
@@ -209,7 +220,8 @@ class _HomeScreenState extends State<HomeScreen> {
 class _DiagnosisMethodRow extends StatelessWidget {
   final VoidCallback onLiveTap;
   final VoidCallback onDroneTap;
-  const _DiagnosisMethodRow({required this.onLiveTap, required this.onDroneTap});
+  const _DiagnosisMethodRow(
+      {required this.onLiveTap, required this.onDroneTap});
 
   @override
   Widget build(BuildContext context) {
@@ -239,7 +251,8 @@ class _DroneActionButton extends StatelessWidget {
       child: IconButton(
         onPressed: onTap,
         padding: const EdgeInsets.all(20),
-        icon: Icon(Icons.airplanemode_active_rounded, color: colorScheme.primary),
+        icon:
+            Icon(Icons.airplanemode_active_rounded, color: colorScheme.primary),
       ),
     );
   }
@@ -249,7 +262,10 @@ class _Header extends StatelessWidget {
   final ColorScheme colorScheme;
   final TextTheme textTheme;
   final VoidCallback onHistoryTap;
-  const _Header({required this.colorScheme, required this.textTheme, required this.onHistoryTap});
+  const _Header(
+      {required this.colorScheme,
+      required this.textTheme,
+      required this.onHistoryTap});
 
   @override
   Widget build(BuildContext context) {
@@ -355,7 +371,10 @@ class _HeroCard extends StatelessWidget {
             ),
             child: const Text(
               'YOLOv8 ENGINE',
-              style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold),
             ),
           ),
           const SizedBox(height: 16),
@@ -405,15 +424,20 @@ class _ActionTile extends StatelessWidget {
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+            border: Border.all(
+                color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Icon(icon, color: colorScheme.primary, size: 28),
               const SizedBox(height: 16),
-              Text(label, style: textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
-              Text(subtitle, style: textTheme.labelSmall?.copyWith(color: colorScheme.onSurfaceVariant)),
+              Text(label,
+                  style: textTheme.titleSmall
+                      ?.copyWith(fontWeight: FontWeight.bold)),
+              Text(subtitle,
+                  style: textTheme.labelSmall
+                      ?.copyWith(color: colorScheme.onSurfaceVariant)),
             ],
           ),
         ),
@@ -446,7 +470,8 @@ class _LiveActionButton extends StatelessWidget {
         style: FilledButton.styleFrom(
           padding: const EdgeInsets.symmetric(vertical: 20),
           backgroundColor: colorScheme.primary,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         ),
         icon: const Icon(Icons.sensors_rounded),
         label: const Text(
@@ -477,11 +502,20 @@ class _SupportedSection extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-        const _DiseaseItem(label: 'Early Blight', color: Color(0xFFFF8C42), icon: Icons.warning_amber_rounded),
+        const _DiseaseItem(
+            label: 'Early Blight',
+            color: Color(0xFFFF8C42),
+            icon: Icons.warning_amber_rounded),
         const SizedBox(height: 12),
-        const _DiseaseItem(label: 'Late Blight', color: Color(0xFFE53935), icon: Icons.error_outline_rounded),
+        const _DiseaseItem(
+            label: 'Late Blight',
+            color: Color(0xFFE53935),
+            icon: Icons.error_outline_rounded),
         const SizedBox(height: 12),
-        const _DiseaseItem(label: 'Healthy Leaf', color: Color(0xFF43A047), icon: Icons.check_circle_outline_rounded),
+        const _DiseaseItem(
+            label: 'Healthy Leaf',
+            color: Color(0xFF43A047),
+            icon: Icons.check_circle_outline_rounded),
       ],
     );
   }
@@ -491,7 +525,8 @@ class _DiseaseItem extends StatelessWidget {
   final String label;
   final Color color;
   final IconData icon;
-  const _DiseaseItem({required this.label, required this.color, required this.icon});
+  const _DiseaseItem(
+      {required this.label, required this.color, required this.icon});
 
   @override
   Widget build(BuildContext context) {
@@ -501,7 +536,8 @@ class _DiseaseItem extends StatelessWidget {
       decoration: BoxDecoration(
         color: colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.3)),
+        border: Border.all(
+            color: colorScheme.outlineVariant.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
@@ -531,8 +567,14 @@ class _LoadingOverlay extends StatelessWidget {
             const SizedBox(height: 24),
             const Text(
               'SYSTEM IS ANALYZING...',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 2),
-            ).animate(onPlay: (c) => c.repeat()).fadeIn(duration: 1.seconds).fadeOut(delay: 500.milliseconds),
+              style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 2),
+            )
+                .animate(onPlay: (c) => c.repeat())
+                .fadeIn(duration: 1.seconds)
+                .fadeOut(delay: 500.milliseconds),
           ],
         ),
       ),

@@ -1,4 +1,5 @@
 import 'dart:isolate';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 
@@ -93,6 +94,11 @@ class ImagePreprocessor {
   const ImagePreprocessor({required this.inputSize});
 
   Future<Float32List> fromBytes(Uint8List bytes) async {
+    final input = await fromBytesDetailed(bytes);
+    return input.tensor;
+  }
+
+  Future<PreprocessedInput> fromBytesDetailed(Uint8List bytes) async {
     return compute(
       _preprocessImageBytesIsolate,
       _PreprocessBytesRequest(
@@ -103,11 +109,39 @@ class ImagePreprocessor {
   }
 
   Future<Float32List> fromCameraFrame(CameraFrame frame) async {
+    final input = await fromCameraFrameDetailed(frame);
+    return input.tensor;
+  }
+
+  Future<PreprocessedInput> fromCameraFrameDetailed(CameraFrame frame) async {
     return compute(
       _preprocessCameraFrameIsolate,
       _CameraPreprocessRequest.fromFrame(frame, inputSize),
     );
   }
+}
+
+@immutable
+class PreprocessedInput {
+  final Float32List tensor;
+  final int sourceWidth;
+  final int sourceHeight;
+  final int inputSize;
+  final int contentLeft;
+  final int contentTop;
+  final int contentWidth;
+  final int contentHeight;
+
+  const PreprocessedInput({
+    required this.tensor,
+    required this.sourceWidth,
+    required this.sourceHeight,
+    required this.inputSize,
+    required this.contentLeft,
+    required this.contentTop,
+    required this.contentWidth,
+    required this.contentHeight,
+  });
 }
 
 @immutable
@@ -172,25 +206,26 @@ class _CameraPreprocessRequest {
   }
 }
 
-Float32List _preprocessImageBytesIsolate(_PreprocessBytesRequest request) {
+PreprocessedInput _preprocessImageBytesIsolate(
+    _PreprocessBytesRequest request) {
   final bytes = request.bytes.materialize().asUint8List();
   final decoded = img.decodeImage(bytes);
   if (decoded == null) {
     throw Exception('Cannot decode image');
   }
 
-  final resized = img.copyResize(
-    decoded,
-    width: request.inputSize,
-    height: request.inputSize,
+  return _letterboxImageToFloat32(
+    img.bakeOrientation(decoded),
+    request.inputSize,
   );
-  return _imageToFloat32(resized);
 }
 
-Float32List _preprocessCameraFrameIsolate(_CameraPreprocessRequest request) {
+PreprocessedInput _preprocessCameraFrameIsolate(
+  _CameraPreprocessRequest request,
+) {
   switch (request.format) {
     case CameraFrameFormat.bgra8888:
-      return _bgraToFloat32(
+      return _bgraToLetterboxFloat32(
         bytes: request.plane0.materialize().asUint8List(),
         width: request.width,
         height: request.height,
@@ -198,7 +233,7 @@ Float32List _preprocessCameraFrameIsolate(_CameraPreprocessRequest request) {
         inputSize: request.inputSize,
       );
     case CameraFrameFormat.yuv420:
-      return _yuv420ToFloat32(
+      return _yuv420ToLetterboxFloat32(
         yPlane: request.plane0.materialize().asUint8List(),
         uPlane: request.plane1!.materialize().asUint8List(),
         vPlane: request.plane2!.materialize().asUint8List(),
@@ -217,58 +252,88 @@ Float32List _preprocessCameraFrameIsolate(_CameraPreprocessRequest request) {
       if (decoded == null) {
         throw Exception('Cannot decode JPEG frame');
       }
-      final resized = img.copyResize(
-        decoded,
-        width: request.inputSize,
-        height: request.inputSize,
+      return _letterboxImageToFloat32(
+        img.bakeOrientation(decoded),
+        request.inputSize,
       );
-      return _imageToFloat32(resized);
   }
 }
 
-Float32List _imageToFloat32(img.Image resized) {
-  final buffer = Float32List(resized.width * resized.height * 3);
-  var index = 0;
+PreprocessedInput _letterboxImageToFloat32(img.Image source, int inputSize) {
+  final layout = _letterboxLayout(source.width, source.height, inputSize);
+  final resized = img.copyResize(
+    source,
+    width: layout.contentWidth,
+    height: layout.contentHeight,
+    interpolation: img.Interpolation.linear,
+  );
+  final buffer = _grayTensor(inputSize);
+
   for (var y = 0; y < resized.height; y++) {
     for (var x = 0; x < resized.width; x++) {
       final pixel = resized.getPixel(x, y);
-      buffer[index++] = pixel.r / 255.0;
-      buffer[index++] = pixel.g / 255.0;
-      buffer[index++] = pixel.b / 255.0;
+      final dstIndex =
+          (((layout.contentTop + y) * inputSize) + layout.contentLeft + x) * 3;
+      buffer[dstIndex] = pixel.r / 255.0;
+      buffer[dstIndex + 1] = pixel.g / 255.0;
+      buffer[dstIndex + 2] = pixel.b / 255.0;
     }
   }
-  return buffer;
+
+  return PreprocessedInput(
+    tensor: buffer,
+    sourceWidth: source.width,
+    sourceHeight: source.height,
+    inputSize: inputSize,
+    contentLeft: layout.contentLeft,
+    contentTop: layout.contentTop,
+    contentWidth: layout.contentWidth,
+    contentHeight: layout.contentHeight,
+  );
 }
 
-Float32List _bgraToFloat32({
+PreprocessedInput _bgraToLetterboxFloat32({
   required Uint8List bytes,
   required int width,
   required int height,
   required int bytesPerRow,
   required int inputSize,
 }) {
-  final buffer = Float32List(inputSize * inputSize * 3);
-  final xRatio = width / inputSize;
-  final yRatio = height / inputSize;
-  var index = 0;
-  for (var y = 0; y < inputSize; y++) {
-    final srcY = (y * yRatio).floor();
+  final layout = _letterboxLayout(width, height, inputSize);
+  final buffer = _grayTensor(inputSize);
+  final xRatio = width / layout.contentWidth;
+  final yRatio = height / layout.contentHeight;
+
+  for (var y = 0; y < layout.contentHeight; y++) {
+    final srcY = math.min((y * yRatio).floor(), height - 1);
     final rowOffset = srcY * bytesPerRow;
-    for (var x = 0; x < inputSize; x++) {
-      final srcX = (x * xRatio).floor();
+    for (var x = 0; x < layout.contentWidth; x++) {
+      final srcX = math.min((x * xRatio).floor(), width - 1);
       final pixelIndex = rowOffset + (srcX * 4);
       final b = bytes[pixelIndex];
       final g = bytes[pixelIndex + 1];
       final r = bytes[pixelIndex + 2];
-      buffer[index++] = r / 255.0;
-      buffer[index++] = g / 255.0;
-      buffer[index++] = b / 255.0;
+      final dstIndex =
+          (((layout.contentTop + y) * inputSize) + layout.contentLeft + x) * 3;
+      buffer[dstIndex] = r / 255.0;
+      buffer[dstIndex + 1] = g / 255.0;
+      buffer[dstIndex + 2] = b / 255.0;
     }
   }
-  return buffer;
+
+  return PreprocessedInput(
+    tensor: buffer,
+    sourceWidth: width,
+    sourceHeight: height,
+    inputSize: inputSize,
+    contentLeft: layout.contentLeft,
+    contentTop: layout.contentTop,
+    contentWidth: layout.contentWidth,
+    contentHeight: layout.contentHeight,
+  );
 }
 
-Float32List _yuv420ToFloat32({
+PreprocessedInput _yuv420ToLetterboxFloat32({
   required Uint8List yPlane,
   required Uint8List uPlane,
   required Uint8List vPlane,
@@ -281,17 +346,18 @@ Float32List _yuv420ToFloat32({
   required int vPixelStride,
   required int inputSize,
 }) {
-  final buffer = Float32List(inputSize * inputSize * 3);
-  final xRatio = width / inputSize;
-  final yRatio = height / inputSize;
-  var index = 0;
-  for (var y = 0; y < inputSize; y++) {
-    final srcY = (y * yRatio).floor();
+  final layout = _letterboxLayout(width, height, inputSize);
+  final buffer = _grayTensor(inputSize);
+  final xRatio = width / layout.contentWidth;
+  final yRatio = height / layout.contentHeight;
+
+  for (var y = 0; y < layout.contentHeight; y++) {
+    final srcY = math.min((y * yRatio).floor(), height - 1);
     final yRowOffset = srcY * yRowStride;
     final uRowOffset = (srcY >> 1) * uRowStride;
     final vRowOffset = (srcY >> 1) * vRowStride;
-    for (var x = 0; x < inputSize; x++) {
-      final srcX = (x * xRatio).floor();
+    for (var x = 0; x < layout.contentWidth; x++) {
+      final srcX = math.min((x * xRatio).floor(), width - 1);
       final yIndex = yRowOffset + srcX;
       final uIndex = uRowOffset + (srcX >> 1) * uPixelStride;
       final vIndex = vRowOffset + (srcX >> 1) * vPixelStride;
@@ -311,10 +377,54 @@ Float32List _yuv420ToFloat32({
       if (g > 255) g = 255;
       if (b > 255) b = 255;
 
-      buffer[index++] = r / 255.0;
-      buffer[index++] = g / 255.0;
-      buffer[index++] = b / 255.0;
+      final dstIndex =
+          (((layout.contentTop + y) * inputSize) + layout.contentLeft + x) * 3;
+      buffer[dstIndex] = r / 255.0;
+      buffer[dstIndex + 1] = g / 255.0;
+      buffer[dstIndex + 2] = b / 255.0;
     }
   }
+
+  return PreprocessedInput(
+    tensor: buffer,
+    sourceWidth: width,
+    sourceHeight: height,
+    inputSize: inputSize,
+    contentLeft: layout.contentLeft,
+    contentTop: layout.contentTop,
+    contentWidth: layout.contentWidth,
+    contentHeight: layout.contentHeight,
+  );
+}
+
+Float32List _grayTensor(int inputSize) {
+  final buffer = Float32List(inputSize * inputSize * 3);
+  buffer.fillRange(0, buffer.length, 114.0 / 255.0);
   return buffer;
+}
+
+_LetterboxLayout _letterboxLayout(int width, int height, int inputSize) {
+  final scale = math.min(inputSize / width, inputSize / height);
+  final contentWidth = math.max(1, (width * scale).round());
+  final contentHeight = math.max(1, (height * scale).round());
+  return _LetterboxLayout(
+    contentLeft: ((inputSize - contentWidth) / 2).round(),
+    contentTop: ((inputSize - contentHeight) / 2).round(),
+    contentWidth: contentWidth,
+    contentHeight: contentHeight,
+  );
+}
+
+class _LetterboxLayout {
+  final int contentLeft;
+  final int contentTop;
+  final int contentWidth;
+  final int contentHeight;
+
+  const _LetterboxLayout({
+    required this.contentLeft,
+    required this.contentTop,
+    required this.contentWidth,
+    required this.contentHeight,
+  });
 }

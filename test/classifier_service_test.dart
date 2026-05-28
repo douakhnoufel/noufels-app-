@@ -13,7 +13,7 @@ void main() {
         recommendations: ['Test recommendation'],
         color: Colors.green,
       );
-      
+
       expect(result.label, equals('Healthy'));
       expect(result.confidence, equals(0.95));
       expect(result.severity, equals('No Disease'));
@@ -28,18 +28,18 @@ void main() {
         recommendations: [],
         color: Colors.orange,
       );
-      
+
       final probs = {
         'Early Blight': 0.75,
         'Late Blight': 0.15,
         'Healthy': 0.10,
       };
-      
+
       final full = FullInferenceResult(
         result: detection,
         probabilities: probs,
       );
-      
+
       expect(full.result.label, equals('Early Blight'));
       expect(full.probabilities['Early Blight'], equals(0.75));
       expect(full.probabilities.length, equals(3));
@@ -52,9 +52,61 @@ void main() {
       for (final p in probs) {
         sum += p;
       }
-      
+
       expect((sum - 1.0).abs(), lessThan(0.05));
+    });
+
+    test('Parses YOLO NMS rows into disease confidences', () {
+      final service = ClassifierService();
+      final full = service.parseModelOutputForTesting(
+        [
+          [
+            [0.0, 0.0, 1.0, 1.0, 0.20, 0.0],
+            [0.0, 0.0, 1.0, 1.0, 0.70, 1.0],
+            [0.0, 0.0, 1.0, 1.0, 0.91, 2.0],
+            [0.0, 0.0, 0.0, 0.0, 0.00, 0.0],
+          ],
+        ],
+        [1, 4, 6],
+      );
+
+      expect(full.result.label, equals('Late Blight'));
+      expect(full.result.confidence, closeTo(0.91, 0.001));
+      expect(full.probabilities['Early Blight'], closeTo(0.20, 0.001));
+      expect(full.probabilities['Healthy'], closeTo(0.70, 0.001));
+      expect(full.probabilities['Late Blight'], closeTo(0.91, 0.001));
+    });
+
+    test('Parses channels-first YOLO output', () {
+      final service = ClassifierService();
+      final full = service.parseModelOutputForTesting(
+        [
+          [
+            [0.0, 0.0],
+            [0.0, 0.0],
+            [1.0, 1.0],
+            [1.0, 1.0],
+            [0.44, 0.77],
+            [0.0, 1.0],
+          ],
+        ],
+        [1, 6, 2],
+      );
+
+      expect(full.result.label, equals('Healthy'));
+      expect(full.result.confidence, closeTo(0.77, 0.001));
+      expect(full.probabilities['Early Blight'], closeTo(0.44, 0.001));
+    });
+
+    test('Still supports simple classification output', () {
+      final service = ClassifierService();
+      final full = service.parseModelOutputForTesting(
+        [0.2, 0.7, 0.1],
+        [1, 3],
+      );
+
+      expect(full.result.label, equals('Healthy'));
+      expect(full.result.confidence, closeTo(0.7, 0.001));
     });
   });
 }
-
